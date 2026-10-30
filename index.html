@@ -1,0 +1,708 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="description" content="Group Ascend (University of Moratuwa): detecting small and thin road damage in countries a detector has never seen, using RDD2022 and YOLO11.">
+<style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>Ascend Road Damage Research</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Overpass:wght@400;600;800;900&family=Public+Sans:ital,wght@0,400;0,600;0,700;1,400&family=Overpass+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: highway-signage research site. Sticky nav, hash-routed views, wide content column of ~1100px, interactive figures drawn in SVG. */
+:root{
+  --bg:#EDEFF1; --surface:#FFFFFF; --sunk:#E2E5E9; --fg:#1B1F24; --muted:#4F5864; --line:#C9CFD6;
+  --sign:#F2B705; --sign-ink:#1B1F24; --asphalt:#262A2F; --asphalt-ink:#F1F2F4;
+  --label:#2F6FB0; --pred:#C2611B; --b:#1F7A70; --heat:#D2452B;
+  --display:"Overpass","Arial Narrow",Arial,sans-serif; --body:"Public Sans",system-ui,-apple-system,"Segoe UI",sans-serif; --mono:"Overpass Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#15181B; --surface:#1E2227; --sunk:#262B31; --fg:#E9ECEF; --muted:#A6AFBA; --line:#363D45;
+  --sign:#F5C431; --sign-ink:#15181B; --asphalt:#0E1012; --asphalt-ink:#EEF0F2;
+  --label:#6FA6E0; --pred:#E58A47; --b:#4DB3A6; --heat:#F0684D; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#15181B; --surface:#1E2227; --sunk:#262B31; --fg:#E9ECEF; --muted:#A6AFBA; --line:#363D45;
+  --sign:#F5C431; --sign-ink:#15181B; --asphalt:#0E1012; --asphalt-ink:#EEF0F2;
+  --label:#6FA6E0; --pred:#E58A47; --b:#4DB3A6; --heat:#F0684D; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:16px;line-height:1.6;margin:0}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--asphalt)}
+a{color:inherit}
+.wrap{max-width:1120px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+h1,h2,h3{font-family:var(--display);line-height:1.1;text-wrap:balance;margin:0}
+h2{font-size:clamp(1.6rem,3.2vw,2.3rem);font-weight:800}
+h3{font-size:1.2rem;font-weight:800}
+p{margin:0;max-width:68ch}
+.eyebrow{font-family:var(--mono);font-size:.78rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.lede{font-size:1.1rem;color:var(--muted)}
+.muted{color:var(--muted)}
+.mono{font-family:var(--mono)}
+:focus-visible{outline:3px solid var(--sign);outline-offset:2px}
+
+/* nav */
+header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--asphalt);color:var(--asphalt-ink)}
+header.top .wrap{display:flex;align-items:center;gap:20px;min-height:56px;flex-wrap:wrap;padding-block:6px}
+.brand{display:flex;align-items:center;gap:10px;text-decoration:none;font-family:var(--display);font-weight:900;letter-spacing:.02em}
+.brand .plate{background:var(--sign);color:var(--sign-ink);padding:2px 8px 0;border-radius:4px;font-size:.95rem}
+nav.views{display:flex;gap:4px;flex-wrap:wrap;margin-left:auto}
+nav.views a{font-family:var(--display);font-weight:600;font-size:.92rem;text-decoration:none;padding:6px 10px;border-radius:6px;color:var(--asphalt-ink);opacity:.82}
+nav.views a:hover{opacity:1;background:rgba(255,255,255,.08)}
+nav.views a[aria-current="page"]{opacity:1;background:var(--sign);color:var(--sign-ink)}
+
+/* hero */
+.hero{background:var(--asphalt);color:var(--asphalt-ink);position:relative;overflow:hidden}
+.hero .wrap{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:40px;align-items:center;padding-block:56px 64px}
+.hero h1{font-size:clamp(2.1rem,5vw,3.6rem);font-weight:900;letter-spacing:-.01em}
+.hero h1 em{font-style:normal;color:var(--sign)}
+.hero p{color:#C3C9D0}
+.hero .meta{font-family:var(--mono);font-size:.8rem;color:#AEB6BF;letter-spacing:.04em}
+.btns{display:flex;gap:12px;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:8px;font-family:var(--display);font-weight:800;text-decoration:none;padding:12px 18px 10px;border-radius:6px;border:2px solid var(--sign);cursor:pointer;font-size:1rem;background:transparent;color:inherit}
+.btn.solid{background:var(--sign);color:var(--sign-ink)}
+.road svg{width:100%;height:auto;display:block}
+
+section.band{padding-block:56px}
+section.band.alt{background:var(--surface)}
+.stack{display:flex;flex-direction:column;gap:16px}
+.stack.lg{gap:28px}
+.grid{display:grid;gap:20px}
+.g3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.g2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.g4{grid-template-columns:repeat(4,minmax(0,1fr))}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:22px;min-width:0}
+.alt .panel{background:var(--bg)}
+.stat .n{font-family:var(--display);font-weight:900;font-size:3rem;line-height:1;color:var(--label)}
+.stat .n.warn{color:var(--pred)}
+.src{font-size:.82rem;color:var(--muted)}
+.sign{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;transform:rotate(45deg);background:var(--sign);border-radius:4px;flex:none}
+.sign span{transform:rotate(-45deg);font-family:var(--display);font-weight:900;color:var(--sign-ink)}
+.card-h{display:flex;gap:14px;align-items:center}
+.tag{display:inline-block;font-family:var(--mono);font-size:.74rem;padding:2px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
+.tag.a{border-color:var(--label);color:var(--label)} .tag.b{border-color:var(--b);color:var(--b)} .tag.c{border-color:var(--pred);color:var(--pred)}
+.steps{counter-reset:s;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:20px}
+.steps li{list-style:none;counter-increment:s;display:flex;flex-direction:column;gap:8px;min-width:0}
+.steps li::before{content:counter(s);font-family:var(--display);font-weight:900;font-size:1.1rem;width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:var(--asphalt);color:var(--sign)}
+ol.steps{padding:0;margin:0}
+.explore{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.explore a{text-decoration:none;display:flex;flex-direction:column;gap:6px}
+.explore a:hover{border-color:var(--sign)}
+.explore a b{font-family:var(--display);font-size:1.1rem}
+
+/* country fold picker */
+.fold{display:flex;flex-direction:column;gap:14px}
+.fold-btns{display:flex;gap:8px;flex-wrap:wrap}
+.chip{font-family:var(--display);font-weight:700;border:1.5px solid var(--line);background:var(--surface);color:var(--fg);padding:8px 14px 6px;border-radius:999px;cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--asphalt);color:var(--sign);border-color:var(--asphalt)}
+.bars{display:flex;flex-direction:column;gap:8px}
+.bar{display:grid;grid-template-columns:130px minmax(0,1fr) 120px;gap:12px;align-items:center;font-size:.92rem}
+.bar .track{height:22px;background:var(--sunk);border-radius:4px;overflow:hidden}
+.bar .fill{height:100%;border-radius:4px;background:var(--label);transition:width .3s,background .3s}
+.bar.out .fill{background:var(--pred)}
+.bar .v{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right}
+.bar .role{font-family:var(--mono);font-size:.75rem;text-transform:uppercase;letter-spacing:.08em}
+
+/* demos */
+.demo{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:24px;align-items:start}
+.track,.fill{display:block}
+.ctrl{display:flex;flex-direction:column;gap:6px}
+.ctrl label{font-weight:600;display:flex;justify-content:space-between;gap:10px}
+.ctrl output{font-family:var(--mono)}
+input[type=range]{width:100%;accent-color:var(--sign)}
+.meter{display:grid;grid-template-columns:150px minmax(0,1fr) 54px;gap:10px;align-items:center;font-size:.92rem}
+.meter .track{height:14px;background:var(--sunk);border-radius:3px;overflow:hidden}
+.meter .fill{height:100%;transition:width .15s}
+.meter .v{font-family:var(--mono);text-align:right;font-variant-numeric:tabular-nums}
+.figure svg{width:100%;height:auto;display:block}
+.figcap{font-size:.85rem;color:var(--muted)}
+.callout{border-left:4px solid var(--sign);padding:4px 0 4px 14px}
+
+/* tabs */
+.tabs{display:flex;gap:6px;flex-wrap:wrap;border-bottom:2px solid var(--line)}
+.tabs button{font-family:var(--display);font-weight:800;font-size:1rem;background:none;border:none;padding:10px 14px 8px;cursor:pointer;color:var(--muted);border-bottom:3px solid transparent;margin-bottom:-2px}
+.tabs button[aria-selected="true"]{color:var(--fg);border-color:var(--sign)}
+dl.kv{display:grid;grid-template-columns:150px minmax(0,1fr);gap:10px 18px;margin:0}
+dl.kv dt{font-family:var(--mono);font-size:.8rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);padding-top:3px}
+dl.kv dd{margin:0}
+
+/* table */
+.tbl{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.94rem}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-family:var(--display);font-weight:800;background:var(--sunk)}
+td.num{font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+
+/* timeline */
+.tl{display:flex;flex-direction:column;gap:10px}
+.tl-row{display:grid;grid-template-columns:200px minmax(0,1fr);gap:14px;align-items:center}
+.tl-track{position:relative;height:26px;background:var(--sunk);border-radius:4px}
+.tl-seg{position:absolute;top:0;bottom:0;border-radius:4px;background:var(--asphalt);display:flex;align-items:center;padding:0 8px;color:var(--sign);font-family:var(--mono);font-size:.74rem;white-space:nowrap;overflow:hidden}
+.tl-axis{display:grid;grid-template-columns:200px minmax(0,1fr);gap:14px}
+.tl-axis .ticks{position:relative;height:18px;font-family:var(--mono);font-size:.72rem;color:var(--muted)}
+.tl-axis .ticks span{position:absolute;transform:translateX(-50%)}
+
+/* viewer */
+.viewer{display:flex;flex-direction:column;gap:12px}
+.viewer .frame{background:var(--asphalt);border-radius:10px;padding:10px}
+.viewer img{display:block;width:100%;height:auto;border-radius:4px}
+.viewer .bar2{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.thumbs{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px}
+.thumbs button{flex:none;width:110px;border:2px solid transparent;border-radius:4px;padding:0;background:none;cursor:pointer}
+.thumbs button[aria-current="true"]{border-color:var(--sign)}
+.thumbs img{width:100%;display:block;border-radius:2px}
+.pages{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px}
+.pages figure{margin:0;display:flex;flex-direction:column;gap:6px}
+.pages img{width:100%;border:1px solid var(--line);border-radius:4px;background:#fff}
+
+.refs{display:flex;flex-direction:column;gap:10px;padding-left:0;margin:0;list-style:none;font-size:.94rem}
+.refs li{display:grid;grid-template-columns:40px minmax(0,1fr);gap:8px}
+.refs .k{font-family:var(--mono);color:var(--muted)}
+footer.foot{background:var(--asphalt);color:#AEB6BF;font-size:.88rem}
+footer.foot .wrap{padding-block:32px;display:flex;flex-direction:column;gap:8px}
+.view[hidden]{display:none!important}
+
+@media (max-width:860px){
+  .hero .wrap,.demo,.g2{grid-template-columns:minmax(0,1fr)}
+  .g3,.explore,.steps,.g4{grid-template-columns:minmax(0,1fr)}
+  .bar{grid-template-columns:100px minmax(0,1fr) 92px}
+  .tl-row,.tl-axis{grid-template-columns:minmax(0,1fr)}
+  .tl-axis div:first-child{display:none}
+  dl.kv{grid-template-columns:minmax(0,1fr)}
+  .meter{grid-template-columns:120px minmax(0,1fr) 48px}
+}
+@media (min-width:861px) and (max-width:1020px){.g4{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="#home"><span class="plate">RDD</span><span>Group Ascend</span></a>
+    <nav class="views" aria-label="Pages">
+      <a href="#home">Home</a>
+      <a href="#background">Past research</a>
+      <a href="#methods">How it works</a>
+      <a href="#dataset">Dataset</a>
+      <a href="#evaluation">Evaluation</a>
+      <a href="#plan">Plan</a>
+      <a href="#team">Team</a>
+      <a href="#presentation">Presentation</a>
+      <a href="#proposal">Proposal</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+<!-- ================= HOME ================= -->
+<div class="view" id="v-home">
+  <section class="hero">
+    <div class="wrap">
+      <div class="stack lg">
+        <span class="eyebrow" style="color:#AEB6BF">IS4990 · Level 04 research proposal · University of Moratuwa · 2026</span>
+        <h1>Finding <em>small road damage</em> in countries a detector has never seen</h1>
+        <p>A road-damage detector trained in Japan or India loses much of its accuracy on another country’s roads, and hairline cracks may be the hardest to catch. We study three ways to help a YOLO11 detector on an unseen country, using no images from that country.</p>
+        <p class="meta">Group Ascend · Chamikara J.R.H. · Amri B.M.M. · Imasha G.G.P. · October 2026</p>
+        <div class="btns"><a class="btn solid" href="#methods">See how it works</a><a class="btn" href="#dataset">Explore the dataset</a></div>
+      </div>
+      <div class="road" aria-hidden="true">
+        <svg viewBox="0 0 520 360" role="img">
+          <rect width="520" height="360" rx="10" fill="#33383E"/>
+          <g opacity=".18" fill="#FFFFFF"><circle cx="40" cy="40" r="1.4"/><circle cx="120" cy="300" r="1.2"/><circle cx="300" cy="60" r="1.5"/><circle cx="460" cy="220" r="1.3"/><circle cx="210" cy="180" r="1.1"/><circle cx="380" cy="320" r="1.4"/><circle cx="80" cy="200" r="1.2"/><circle cx="480" cy="90" r="1.1"/></g>
+          <rect x="250" y="0" width="12" height="60" fill="#F2B705"/><rect x="250" y="100" width="12" height="60" fill="#F2B705"/><rect x="250" y="200" width="12" height="60" fill="#F2B705"/><rect x="250" y="300" width="12" height="60" fill="#F2B705"/>
+          <path d="M70 70 L84 110 L78 150 L92 200 L86 250 L96 300" stroke="#0F1113" stroke-width="3" fill="none" stroke-linecap="round"/>
+          <rect x="62" y="62" width="44" height="246" fill="none" stroke="#6FA6E0" stroke-width="3"/>
+          <text x="62" y="54" fill="#6FA6E0" font-family="Overpass Mono, monospace" font-size="13">D00 · thin</text>
+          <path d="M330 250 l26 -10 l22 6 l18 -12 l30 4" stroke="#0F1113" stroke-width="2.5" fill="none"/>
+          <rect x="322" y="230" width="112" height="30" fill="none" stroke="#6FA6E0" stroke-width="3"/>
+          <rect x="328" y="236" width="112" height="30" fill="none" stroke="#E58A47" stroke-width="3" stroke-dasharray="8 5"/>
+          <text x="322" y="222" fill="#6FA6E0" font-family="Overpass Mono, monospace" font-size="13">D10 · transverse</text>
+          <ellipse cx="400" cy="110" rx="46" ry="28" fill="#1C1F23" stroke="#0F1113" stroke-width="2"/>
+          <rect x="348" y="76" width="104" height="68" fill="none" stroke="#6FA6E0" stroke-width="3"/>
+          <text x="348" y="68" fill="#6FA6E0" font-family="Overpass Mono, monospace" font-size="13">D40 · pothole</text>
+          <g transform="translate(150 150)"><rect x="-26" y="-26" width="52" height="52" fill="#D2452B" opacity=".28"/><rect x="-26" y="-26" width="52" height="52" fill="none" stroke="#F0684D" stroke-width="2" stroke-dasharray="4 4"/><text x="-26" y="44" fill="#F0684D" font-family="Overpass Mono, monospace" font-size="12">likely missed</text></g>
+        </svg>
+        <p class="figcap" style="color:#AEB6BF">Illustration: labelled boxes (blue), a prediction (dashed orange), and a cell flagged as a likely miss (red).</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="band">
+    <div class="wrap stack lg">
+      <div class="stack"><span class="eyebrow">Why</span><h2>Detectors trained in one country stumble in the next</h2></div>
+      <div class="grid g3">
+        <div class="panel stat stack"><span class="n">0.20</span><p>mAP@0.5 for a detector trained on Japanese roads and tested on Indian roads.</p><span class="src">Lin et al., 2023, IEEE T-ITS (DA-RDD)</span></div>
+        <div class="panel stat stack"><span class="n">0.32</span><p>mAP@0.5 for YOLOv8s trained in India and tested in South Africa.</p><span class="src">Babawarun et al., 2025, Sustainability</span></div>
+        <div class="panel stat stack"><span class="n warn">None</span><p>large public labelled road-damage datasets we could find for Sri Lanka, so a detector here would be trained on other countries’ images.</p><span class="src">Our search, October 2026</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band alt">
+    <div class="wrap grid g2" style="align-items:center">
+      <div class="stack"><span class="eyebrow">Real data</span><h2>Cracks are often only a few pixels wide</h2><p>In RDD2022, longitudinal and transverse cracks get tall, narrow or short, flat boxes, while alligator cracks and potholes get wide ones. Our three studies target the narrow ones.</p><div class="btns"><a class="btn" href="#dataset">See more dataset images</a></div></div>
+      <figure class="stack" style="margin:0"><img src="media/grddc-sample2.jpg" alt="Road image with a tall, narrow box around a thin longitudinal crack" style="width:100%;border-radius:8px" loading="lazy"><figcaption class="figcap">A thin longitudinal crack (D00) from the 2020 challenge data in RDD2022, with a model’s predicted box. CC BY-SA 4.0; figure from USC-InfoLab/rddc2020.</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="band">
+    <div class="wrap stack lg">
+      <div class="stack"><span class="eyebrow">The problem we address</span><h2>Thin cracks go missing, and nothing says so</h2></div>
+      <div class="grid g4">
+        <div class="panel stack"><div class="card-h"><span class="sign"><span>!</span></span><h3>Roads look different</h3></div><p>Pavement, markings, cameras, lighting and labelling styles change from country to country.</p></div>
+        <div class="panel stack"><div class="card-h"><span class="sign"><span>!</span></span><h3>No local labels</h3></div><p>A new country often has no labelled road images, so fine-tuning is not an option.</p></div>
+        <div class="panel stack"><div class="card-h"><span class="sign"><span>!</span></span><h3>Thin damage is fragile</h3></div><p>A crack a few pixels wide loses half its box overlap after a two-pixel error.</p></div>
+        <div class="panel stack"><div class="card-h"><span class="sign"><span>!</span></span><h3>Misses are silent</h3></div><p>A missed crack produces no box at all, so an inspector gets no warning.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band alt">
+    <div class="wrap stack lg">
+      <div class="stack"><span class="eyebrow">Our approach</span><h2>One shared benchmark, three member studies</h2><p class="lede">Every study uses the same folds, detector and rules. Each member changes one part of the pipeline and compares it with a matched alternative.</p></div>
+      <ol class="steps">
+        <li><h3>Hold one country out</h3><p>Train on three RDD2022 countries; the fourth is never used for training or tuning.</p></li>
+        <li><h3>Shared YOLO11 baseline</h3><p>YOLO11s from COCO weights, 640 px, Ultralytics v8.4.192, the same for everyone.</p></li>
+        <li><h3>Three changes</h3><p>A changes how thin boxes are matched, B adds scale consistency, C predicts where damage was missed.</p></li>
+        <li><h3>Score once</h3><p>After a freeze, each held-out country is scored once, with seeds and a paired bootstrap.</p></li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="band">
+    <div class="wrap stack lg">
+      <div class="stack"><span class="eyebrow">Research questions</span><h2>Three questions, one per member</h2></div>
+      <div class="grid g3">
+        <div class="panel stack"><span class="tag a">Member A · Matching</span><h3>Does judging error relative to box thinness help?</h3><p>Short-side-normalised NWD in YOLO11’s assigner against plain NWD. Measured by held-out mAP50:95.</p></div>
+        <div class="panel stack"><span class="tag b">Member B · Consistency</span><h3>Does scale agreement on small damage beat generic agreement?</h3><p>Consistency only on small and thin boxes against the same loss on all boxes. Measured by held-out recall.</p></div>
+        <div class="panel stack"><span class="tag c">Member C · Miss warnings</span><h3>Can detector features show where damage was missed?</h3><p>A 40 × 40 miss map from features plus weak detections against weak detections alone. Measured by AUPRC.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band alt">
+    <div class="wrap stack lg">
+      <div class="stack"><span class="eyebrow">Explore</span><h2>See it for yourself</h2></div>
+      <div class="explore">
+        <a class="panel" href="#background"><b>Past research</b><span class="muted">Fine-tuning, domain adaptation and source-only generalisation, and where our gap is.</span></a>
+        <a class="panel" href="#methods"><b>How it works</b><span class="muted">Drag sliders to see why thin boxes need a different matching rule.</span></a>
+        <a class="panel" href="#dataset"><b>Dataset</b><span class="muted">RDD2022 countries, damage classes and the four folds.</span></a>
+        <a class="panel" href="#evaluation"><b>Evaluation</b><span class="muted">How we keep the comparison fair, and what we will not claim.</span></a>
+        <a class="panel" href="#plan"><b>Plan and compute</b><span class="muted">The 34-week timeline, GPU budget and order of cuts.</span></a>
+        <a class="panel" href="#presentation"><b>Presentation</b><span class="muted">Flip through the 14-slide proposal presentation.</span></a>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- ================= BACKGROUND ================= -->
+<div class="view" id="v-background" hidden>
+  <section class="band"><div class="wrap stack lg">
+    <div class="stack"><span class="eyebrow">Past research</span><h2>Three ways to move a detector to a new country</h2><p class="lede">They differ in what they need from the new country. Only source-only generalisation needs nothing, which matches a country with no collected data.</p></div>
+    <div class="tbl panel" style="padding:0"><table>
+      <thead><tr><th>Approach</th><th>Needs from the new country</th><th>Example</th></tr></thead>
+      <tbody>
+        <tr><td>Fine-tuning</td><td>Labelled images</td><td>Babawarun et al., 2025 [2]</td></tr>
+        <tr><td>Unsupervised domain adaptation</td><td>Unlabelled images</td><td>DA-RDD, Lin et al., 2023 [7]</td></tr>
+        <tr><td><b>Source-only domain generalisation</b></td><td><b>Nothing</b></td><td>MAMDG, Chen et al., 2026 [3], which aligns features across source countries</td></tr>
+      </tbody></table></div>
+  </div></section>
+  <section class="band alt"><div class="wrap stack lg">
+    <div class="stack"><span class="eyebrow">Closest work per study</span><h2>What exists, and what we add</h2></div>
+    <div class="grid g3">
+      <div class="panel stack"><span class="tag a">A</span><h3>Tiny-object distances</h3><p>NWD measures tiny boxes more gently than IoU [10], and the task-aligned assigner picks which predictions learn from each box [5].</p><p class="muted"><b>Our step:</b> scale NWD by each box’s short side inside the assigner, and test it on an unseen road-damage country.</p></div>
+      <div class="panel stack"><span class="tag b">B</span><h3>Consistency training</h3><p>Agreement between views improves single-domain generalisation [4]; averaged teachers give stable targets [9].</p><p class="muted"><b>Our step:</b> enforce agreement across image scales only on small and thin damage, with no target images.</p></div>
+      <div class="panel stack"><span class="tag c">C</span><h3>Failure prediction</h3><p>Monitors have flagged missed traffic signs [8] and, in a 2026 preprint, missed persons in COCO images [11].</p><p class="muted"><b>Our step:</b> a cell-level map of missed road damage on a country the detector never saw.</p></div>
+    </div>
+    <p class="callout">To our knowledge, no published study has tested these three specific changes, with matched comparisons, on a road-damage country unseen in training and without its data.</p>
+  </div></section>
+  <section class="band"><div class="wrap stack lg">
+    <div class="stack"><span class="eyebrow">References</span><h2>Sources</h2></div>
+    <ol class="refs">
+      <li><span class="k">[1]</span><span>Arya, D. et al. (2024). RDD2022: A multi-national image dataset for automatic road damage detection. <i>Geoscience Data Journal</i>. <a href="https://doi.org/10.1002/gdj3.260" target="_blank" rel="noopener">doi:10.1002/gdj3.260</a></span></li>
+      <li><span class="k">[2]</span><span>Babawarun, T., Pandelani, T. &amp; Ngwangwa, H. (2025). Transferability of measured data for YOLOv8s road-defect identification: an SA–Indian case study. <i>Sustainability</i>, 17(23), 10641.</span></li>
+      <li><span class="k">[3]</span><span>Chen, Z. et al. (2026). Multi-adversarial metric-constrained domain generalization for road damage detection. <i>Image and Vision Computing</i>, 106173.</span></li>
+      <li><span class="k">[4]</span><span>Danish, M. S. et al. (2024). Improving single domain-generalized object detection: a focus on diversification and alignment. <i>CVPR</i>.</span></li>
+      <li><span class="k">[5]</span><span>Feng, C. et al. (2021). TOOD: Task-aligned one-stage object detection. <i>ICCV</i>, 3490–3499.</span></li>
+      <li><span class="k">[6]</span><span>Jocher, G. &amp; Qiu, J. (2024). Ultralytics YOLO11, release v8.4.192 used. <a href="https://github.com/ultralytics/ultralytics" target="_blank" rel="noopener">github.com/ultralytics/ultralytics</a></span></li>
+      <li><span class="k">[7]</span><span>Lin, C. et al. (2023). DA-RDD: Toward domain adaptive road damage detection across different countries. <i>IEEE T-ITS</i>, 24(3), 3091–3103.</span></li>
+      <li><span class="k">[8]</span><span>Rahman, Q. M., Sünderhauf, N. &amp; Dayoub, F. (2019). Did you miss the sign? A false negative alarm system for traffic sign detectors. <i>IROS</i>.</span></li>
+      <li><span class="k">[9]</span><span>Tarvainen, A. &amp; Valpola, H. (2017). Mean teachers are better role models. <i>NeurIPS</i>.</span></li>
+      <li><span class="k">[10]</span><span>Wang, J. et al. (2021). A normalized Gaussian Wasserstein distance for tiny object detection. <a href="https://arxiv.org/abs/2110.13389" target="_blank" rel="noopener">arXiv:2110.13389</a></span></li>
+      <li><span class="k">[11]</span><span>Zimmermann, J. P., Holzbach, G. &amp; Lerch, D. (2026). Knowledge-guided failure prediction (preprint). <a href="https://arxiv.org/abs/2603.25499" target="_blank" rel="noopener">arXiv:2603.25499</a></span></li>
+    </ol>
+  </div></section>
+</div>
+
+<!-- ================= METHODS ================= -->
+<div class="view" id="v-methods" hidden>
+  <section class="band"><div class="wrap stack lg">
+    <div class="stack"><span class="eyebrow">Member A · Matching</span><h2>Why a two-pixel error hurts a crack more than a pothole</h2>
+      <p class="lede">During training, the assigner scores how well each prediction matches a labelled box. Change the box’s short side and the shift to compare three scores.</p></div>
+    <div class="demo panel">
+      <div class="stack">
+        <div class="figure"><svg id="aSvg" viewBox="0 0 420 260" role="img" aria-label="A labelled box and a shifted prediction"></svg></div>
+        <p class="figcap"><span style="color:var(--label)">Solid: labelled box</span> · <span style="color:var(--pred)">Dashed: prediction shifted sideways</span>. Long side fixed at 64 px.</p>
+      </div>
+      <div class="stack">
+        <div class="ctrl"><label for="aS">Short side of the box <output id="aSo">4 px</output></label><input id="aS" type="range" min="2" max="64" value="4"></div>
+        <div class="ctrl"><label for="aD">Prediction shift <output id="aDo">2 px</output></label><input id="aD" type="range" min="0" max="10" step="0.5" value="2"></div>
+        <div class="stack" style="gap:10px">
+          <div class="meter"><span>IoU</span><span class="track"><span class="fill" id="mIou" style="background:var(--muted)"></span></span><span class="v" id="vIou"></span></div>
+          <div class="meter"><span>Plain NWD</span><span class="track"><span class="fill" id="mN" style="background:var(--pred)"></span></span><span class="v" id="vN"></span></div>
+          <div class="meter"><span>Short-side NWD</span><span class="track"><span class="fill" id="mS" style="background:var(--label)"></span></span><span class="v" id="vS"></span></div>
+        </div>
+        <p class="mono" style="font-size:.85rem">IoU = (s − d) / (s + d) · NWD = exp(−W₂ / C) · ours = exp(−W₂ / (κ·s))</p>
+        <p class="figcap">For two equal boxes offset by d, the Wasserstein distance W₂ equals d. Illustration uses C = 12 px and κ = 1; the real values are tuned per fold with equal effort for both rules.</p>
+        <p id="aNote" class="callout"></p>
+      </div>
+    </div>
+  </div></section>
+
+  <section class="band alt"><div class="wrap stack lg">
+    <div class="stack"><span class="eyebrow">Member B · Consistency</span><h2>The same crack, seen at two sizes</h2>
+      <p class="lede">Cameras and mounting heights differ between countries, so the same crack appears at different sizes. B asks the model to agree with itself across scales, only on small and thin damage.</p></div>
+    <div class="grid g2">
+      <div class="panel stack">
+        <div class="figure"><svg viewBox="0 0 420 240" role="img" aria-label="Teacher sees full-size image, student sees half-size copy">
+          <rect x="10" y="20" width="220" height="200" rx="6" fill="var(--sunk)"/><text x="20" y="14" font-family="Overpass Mono, monospace" font-size="12" fill="var(--muted)">Teacher · 640 px</text>
+          <path d="M60 60 l10 40 l-4 40 l8 50" stroke="var(--fg)" stroke-width="2.5" fill="none"/><rect x="52" y="54" width="30" height="142" fill="none" stroke="var(--label)" stroke-width="2.5"/>
+          <rect x="270" y="70" width="110" height="100" rx="6" fill="var(--sunk)"/><text x="270" y="64" font-family="Overpass Mono, monospace" font-size="12" fill="var(--muted)">Student · 320 px</text>
+          <path d="M295 90 l5 20 l-2 20 l4 25" stroke="var(--fg)" stroke-width="1.5" fill="none"/><rect x="291" y="87" width="15" height="71" fill="none" stroke="var(--b)" stroke-width="2"/>
+          <path d="M240 120 h20" stroke="var(--muted)" stroke-width="2" marker-end="url(#ar)"/>
+          <defs><marker id="ar" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="var(--muted)"/></marker></defs>
+        </svg></div>
+        <p class="figcap">The teacher is a slowly averaged copy of the model. The student still trains normally at 640 px; the half-size view only adds an agreement loss.</p>
+      </div>
+      <div class="panel stack">
+        <dl class="kv">
+          <dt>Change</dt><dd>Consistency loss (class scores and box positions) on small and thin labelled boxes only.</dd>
+          <dt>Compare</dt><dd>The same loss on all boxes; secondary: on a random set of boxes of equal number.</dd>
+          <dt>Measure</dt><dd>Held-out recall of small or thin damage at a threshold chosen on source data.</dd>
+          <dt>Guard</dt><dd>False positives per image at most 10% above generic consistency.</dd>
+        </dl>
+      </div>
+    </div>
+  </div></section>
+
+  <section class="band"><div class="wrap stack lg">
+    <div class="stack"><span class="eyebrow">Member C · Miss warnings</span><h2>A map of where damage was probably missed</h2>
+      <p class="lede">A missed crack produces no box. The detector often half-sees it: its features react, or it guesses below the threshold. A small network reads those signs and marks a 40 × 40 grid.</p></div>
+    <div class="demo panel">
+      <div class="stack">
+        <canvas id="cMap" width="480" height="300" style="width:100%;height:auto;border-radius:6px;background:var(--sunk)" aria-label="Illustrative missed-damage heat map over a road image"></canvas>
+        <p class="figcap">Illustration only, not a result. Red cells mark likely missed small or thin damage; blue boxes are detections the detector did make.</p>
+      </div>
+      <div class="stack">
+        <div class="ctrl"><label for="cT">Warning threshold <output id="cTo">0.50</output></label><input id="cT" type="range" min="0.1" max="0.9" step="0.05" value="0.5"></div>
+        <p id="cCount" class="mono"></p>
+        <dl class="kv">
+          <dt>Inputs</dt><dd>Frozen detector features (P3/P4) and a map of its low-confidence detections.</dd>
+          <dt>Compare</dt><dd>The same head trained on the low-confidence map only.</dd>
+          <dt>Measure</dt><dd>Cell-level AUPRC on the held-out country, with the share of positive cells.</dd>
+          <dt>Limit</dt><dd>Warnings flag areas for review; they do not recover the missed crack.</dd>
+        </dl>
+      </div>
+    </div>
+  </div></section>
+</div>
+
+<!-- ================= DATASET ================= -->
+<div class="view" id="v-dataset" hidden>
+  <section class="band"><div class="wrap stack lg">
+    <div class="stack"><span class="eyebrow">RDD2022</span><h2>25,846 labelled images from four countries</h2>
+      <p class="lede">RDD2022 has 47,420 road images from six countries, labelled with boxes for cracks and potholes. We use the four countries with labelled training images. Pick the held-out country for a fold.</p></div>
+    <div class="panel fold">
+      <div class="fold-btns" role="group" aria-label="Held-out country">
+        <button class="chip" data-c="JP">Japan</button><button class="chip" data-c="IN">India</button><button class="chip" data-c="US">United States</button><button class="chip" data-c="CZ" aria-pressed="true">Czech Republic</button>
+      </div>
+      <div class="bars" id="bars"></div>
+      <p id="foldNote" class="muted"></p>
+    </div>
+  </div></section>
+  <section class="band alt" id="real-data"><div class="wrap stack lg">
+    <div class="stack"><span class="eyebrow">Real data</span><h2>What RDD2022 labels look like</h2>
+      <p class="lede">Sixteen Japanese images with their ground-truth boxes. Notice how small and thin many crack boxes are next to the alligator-crack and pothole boxes.</p></div>
+    <figure class="panel stack" style="margin:0">
+      <img src="media/rdd-japan-labels.jpg" alt="Grid of 16 Japanese road images from RDD2022 with ground-truth boxes for longitudinal, transverse and alligator cracks and potholes" style="width:100%;border-radius:6px" loading="lazy">
+      <figcaption class="figcap">RDD2022 Japan images with ground-truth labels, shown as a YOLOv8 validation batch. Images: Arya et al., RDD2022, CC BY-SA 4.0. Figure from the open-source project oracl4/RoadDamageDetection on GitHub.</figcaption>
+    </figure>
+    <div class="stack"><h3>Different countries, different roads</h3>
+      <p>The 2020 challenge data inside RDD2022 come from Japan, India and the Czech Republic. Road surface, markings, roadside and camera position all change between them, which is why a detector trained in one country struggles in another.</p></div>
+    <div class="grid g3">
+      <figure class="stack" style="margin:0"><img src="media/grddc-sample1.jpg" alt="Dusty rural road with a pothole detection" style="width:100%;border-radius:6px" loading="lazy"><figcaption class="figcap">Rural road, pale worn surface; one pothole detection (D40).</figcaption></figure>
+      <figure class="stack" style="margin:0"><img src="media/grddc-sample2.jpg" alt="Narrow paved road with a thin longitudinal crack detection" style="width:100%;border-radius:6px" loading="lazy"><figcaption class="figcap">Narrow paved road; a thin longitudinal crack (D00) gets a tall, narrow box.</figcaption></figure>
+      <figure class="stack" style="margin:0"><img src="media/grddc-sample3.jpg" alt="City street with a transverse crack detection" style="width:100%;border-radius:6px" loading="lazy"><figcaption class="figcap">City street with tram-era buildings; a transverse crack (D10) across the lane.</figcaption></figure>
+    </div>
+    <p class="figcap">These three boxes are predictions from a 2020 challenge model with its confidence scores, not ground truth. Images: Global Road Damage Detection Challenge 2020 data (part of RDD2022), CC BY-SA 4.0. Figures from USC-InfoLab/rddc2020 on GitHub.</p>
+  </div></section>
+
+  <section class="band"><div class="wrap stack lg">
+    <div class="stack"><span class="eyebrow">Damage classes</span><h2>What the boxes mean</h2></div>
+    <div class="grid g4">
+      <div class="panel stack"><span class="tag mono">D00</span><h3>Longitudinal crack</h3><p>Runs along the road; often long and only a few pixels wide.</p></div>
+      <div class="panel stack"><span class="tag mono">D10</span><h3>Transverse crack</h3><p>Runs across the road; often short and thin.</p></div>
+      <div class="panel stack"><span class="tag mono">D20</span><h3>Alligator crack</h3><p>A network of connected cracks over an area.</p></div>
+      <div class="panel stack"><span class="tag mono">D40</span><h3>Pothole</h3><p>A bowl-shaped hole; usually a wide box.</p></div>
+    </div>
+    <div class="panel stack">
+      <h3>Size definitions, fixed for every fold</h3>
+      <dl class="kv">
+        <dt>Small</dt><dd>Box area under 32 × 32 px at the 640 px input size.</dd>
+        <dt>Thin</dt><dd>Box short side under 16 px at 640 px.</dd>
+        <dt>Missed</dt><dd>No prediction of the same class matches the box one-to-one at IoU ≥ 0.5, at a threshold chosen on source data only.</dd>
+      </dl>
+    </div>
+  </div></section>
+  <section class="band alt"><div class="wrap stack">
+    <span class="eyebrow">Data and credits</span>
+    <p>RDD2022 by Arya et al. (2024), released under CC BY-SA 4.0; the dataset photos on this page are shared under the same licence. No new photos are collected for this project. The road picture on the home page and the heat map on How it works are drawings, not results.</p>
+  </div></section>
+</div>
+
+<!-- ================= EVALUATION ================= -->
+<div class="view" id="v-evaluation" hidden>
+  <section class="band"><div class="wrap stack lg">
+    <div class="stack"><span class="eyebrow">Evaluation</span><h2>Fair by design, decided before any result</h2></div>
+    <div class="grid g2">
+      <div class="panel stack"><h3>Fixed in advance</h3><p>Comparisons, measures, size definitions and threshold rules are committed before any held-out result.</p></div>
+      <div class="panel stack"><h3>Equal effort</h3><p>Each method and its comparison get the same data, training budget and tuning.</p></div>
+      <div class="panel stack"><h3>Sealed test countries</h3><p>All development uses an inner validation country. The week-6 pilot measures the accuracy drop there; held-out countries are scored once, after a freeze.</p></div>
+      <div class="panel stack"><h3>Uncertainty reported</h3><p>Three seeds for principal comparisons and a paired bootstrap over whole images. Results per country, as a mean and for the worst country.</p></div>
+    </div>
+  </div></section>
+  <section class="band alt"><div class="wrap stack lg">
+    <div class="stack"><span class="eyebrow">Hypotheses</span><h2>What each study predicts</h2></div>
+    <div class="tabs" role="tablist" aria-label="Member hypotheses">
+      <button role="tab" id="t-a" aria-selected="true" aria-controls="p-a">Member A</button>
+      <button role="tab" id="t-b" aria-selected="false" aria-controls="p-b">Member B</button>
+      <button role="tab" id="t-c" aria-selected="false" aria-controls="p-c">Member C</button>
+    </div>
+    <div class="panel" role="tabpanel" id="p-a" aria-labelledby="t-a"><dl class="kv">
+      <dt>H1</dt><dd>The short-side rule gives higher held-out mAP50:95 than plain NWD, overall and for small or thin boxes.</dd>
+      <dt>Method</dt><dd>S = exp(−W₂ / (κ·s)) in YOLO11’s task-aligned assigner; changes both assignment and training weights.</dd>
+      <dt>Compare</dt><dd>Plain NWD, exp(−W₂ / C), with C tuned with equal effort.</dd>
+      <dt>Explain</dt><dd>Matches per box, unmatched boxes and training weight logged by box size.</dd></dl></div>
+    <div class="panel" role="tabpanel" id="p-b" aria-labelledby="t-b" hidden><dl class="kv">
+      <dt>H2</dt><dd>Focusing consistency on small and thin damage raises their held-out recall more than applying it to all boxes.</dd>
+      <dt>Compare</dt><dd>The same loss on all boxes; secondary: a random set of boxes of equal number.</dd>
+      <dt>Guard</dt><dd>False positives per image at most 10% above generic consistency.</dd></dl></div>
+    <div class="panel" role="tabpanel" id="p-c" aria-labelledby="t-c" hidden><dl class="kv">
+      <dt>H3</dt><dd>Adding detector features gives higher held-out AUPRC for missed small or thin damage than the weak-detection map alone.</dd>
+      <dt>Labels</dt><dd>From source slices the detector never trained on; separate slices for fitting and selection.</dd>
+      <dt>Gate</dt><dd>Week 8 label check; if unusable, switch to an image-level miss predictor.</dd></dl></div>
+  </div></section>
+  <section class="band"><div class="wrap stack">
+    <span class="eyebrow">What we will not claim</span>
+    <p>Results are benchmark evidence on four countries. We make no claim about maintenance savings, road safety, or performance on Sri Lankan roads.</p>
+  </div></section>
+</div>
+
+<!-- ================= PLAN ================= -->
+<div class="view" id="v-plan" hidden>
+  <section class="band"><div class="wrap stack lg">
+    <div class="stack"><span class="eyebrow">Plan of action</span><h2>34 weeks from protocol to viva</h2><p class="lede">Weeks count from the approved project start.</p></div>
+    <div class="panel tl" id="tl"></div>
+  </div></section>
+  <section class="band alt"><div class="wrap stack lg">
+    <div class="stack"><span class="eyebrow">Compute</span><h2>GPU time is the main risk</h2></div>
+    <div class="grid g3">
+      <div class="panel stat stack"><span class="n">72–84</span><p>final detector trainings, plus 20–30 development runs.</p></div>
+      <div class="panel stat stack"><span class="n">3–9 h</span><p>assumed per ordinary run at 50 epochs; Member B’s two-view runs about 1.5 times that.</p></div>
+      <div class="panel stat stack"><span class="n warn">350–1,200</span><p>GPU-hours in total, to be measured in the week-6 pilot.</p></div>
+    </div>
+    <div class="panel stack">
+      <h3>If the measured total exceeds the available time, cut in this order</h3>
+      <ol class="steps" style="grid-template-columns:repeat(3,minmax(0,1fr))">
+        <li><p>Drop the combined A+B run.</p></li>
+        <li><p>Drop the one-seed control runs.</p></li>
+        <li><p>Reduce three seeds to two. No held-out country is dropped.</p></li>
+      </ol>
+    </div>
+    <div class="panel stack">
+      <h3>Resources</h3>
+      <ul style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px">
+        <li>NVIDIA GPUs with at least 12 GB memory, roughly 20–65 hours per week across the team, from the free Kaggle (about 30 hours per week per account) and Google Colab tiers.</li>
+        <li>Personal computers with at least 16 GB RAM; about 100 GB storage for data, cached features and checkpoints.</li>
+        <li>Python, PyTorch, Ultralytics v8.4.192, scikit-learn, FastAPI and React; Git and GitHub.</li>
+      </ul>
+    </div>
+  </div></section>
+</div>
+
+<!-- ================= TEAM ================= -->
+<div class="view" id="v-team" hidden>
+  <section class="band"><div class="wrap stack lg">
+    <div class="stack"><span class="eyebrow">Group Ascend</span><h2>Who we are</h2></div>
+    <div class="grid g3">
+      <div class="panel stack"><span class="mono muted">225019D</span><h3>Chamikara J.R.H.</h3></div>
+      <div class="panel stack"><span class="mono muted">225007N</span><h3>Amri B.M.M.</h3></div>
+      <div class="panel stack"><span class="mono muted">225040H</span><h3>Imasha G.G.P.</h3></div>
+    </div>
+    <div class="panel stack">
+      <span class="eyebrow">Supervisors</span>
+      <p><b>Prof. (Mrs) Thanuja Sandanayake</b></p>
+      <p><b>Dr. A.L.A. Romesh R. Thanuja</b></p>
+      <p class="muted">Faculty of Information Technology, University of Moratuwa</p>
+    </div>
+  </div></section>
+  <section class="band alt"><div class="wrap stack lg">
+    <div class="stack"><span class="eyebrow">Member studies</span><h2>One study each, one shared baseline</h2></div>
+    <div class="grid g3">
+      <div class="panel stack"><span class="tag a">Member A</span><h3>Size-aware label assignment</h3><p>Short-side-normalised NWD in YOLO11’s assigner.</p><p class="muted">Output: held-out mAP50:95, assignment logs by box size.</p></div>
+      <div class="panel stack"><span class="tag b">Member B</span><h3>Scale-consistency learning</h3><p>Teacher–student agreement across 640 and 320 px on small and thin damage.</p><p class="muted">Output: held-out recall with a false-positive guard.</p></div>
+      <div class="panel stack"><span class="tag c">Member C</span><h3>Missed-detection prediction</h3><p>A 40 × 40 miss map from frozen features and weak detections.</p><p class="muted">Output: cell-level AUPRC and the web demo’s heat map.</p></div>
+    </div>
+    <p class="muted">All three build the shared baseline together in weeks 4–6 and the prototype web application in weeks 28–30.</p>
+  </div></section>
+</div>
+
+<!-- ================= PRESENTATION ================= -->
+<div class="view" id="v-presentation" hidden>
+  <section class="band"><div class="wrap stack lg">
+    <div class="stack"><span class="eyebrow">Proposal presentation</span><h2>14 slides, 10 minutes</h2></div>
+    <div class="viewer">
+      <div class="frame"><img id="slideImg" src="media/slide-01.jpg" alt="Slide 1"></div>
+      <div class="bar2"><button class="btn" id="prev" type="button">Previous</button><span class="mono" id="slideNo">1 / 14</span><button class="btn solid" id="next" type="button">Next</button></div>
+      <div class="thumbs" id="thumbs"></div>
+    </div>
+  </div></section>
+</div>
+
+<!-- ================= PROPOSAL ================= -->
+<div class="view" id="v-proposal" hidden>
+  <section class="band"><div class="wrap stack lg">
+    <div class="stack"><span class="eyebrow">Project proposal</span><h2>The submitted report</h2><p class="lede">Domain-Generalised Detection of Small and Thin Road Damage in Unseen Countries: Size-Aware Label Assignment, Scale-Consistency Learning and Missed-Detection Prediction.</p></div>
+    <div class="pages" id="pages"></div>
+  </div></section>
+</div>
+</main>
+
+<footer class="foot"><div class="wrap">
+  <span><b style="color:var(--asphalt-ink)">Group Ascend</b> · IS4990 Comprehensive Group Project · Faculty of Information Technology, University of Moratuwa · 2026</span>
+  <span>Dataset: RDD2022 (CC BY-SA 4.0). Illustrations on this site are drawings, not results.</span>
+</div></footer>
+
+<script>
+(function(){
+  // ---------- routing ----------
+  var views=['home','background','methods','dataset','evaluation','plan','team','presentation','proposal'];
+  function show(){
+    var h=(location.hash||'#home').slice(1); if(views.indexOf(h)<0) h='home';
+    views.forEach(function(v){ var el=document.getElementById('v-'+v); if(el) el.hidden=(v!==h); });
+    document.querySelectorAll('nav.views a').forEach(function(a){ if(a.getAttribute('href')==='#'+h) a.setAttribute('aria-current','page'); else a.removeAttribute('aria-current'); });
+    window.scrollTo(0,0);
+    if(h==='methods') drawMap();
+  }
+  window.addEventListener('hashchange',show);
+
+  function css(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim();}
+
+  // ---------- Member A demo ----------
+  var aS=document.getElementById('aS'), aD=document.getElementById('aD');
+  function upA(){
+    var s=+aS.value, d=+aD.value, L=64, C=12, k=1;
+    document.getElementById('aSo').textContent=s+' px'; document.getElementById('aDo').textContent=d+' px';
+    var iou = d>=s?0:(s-d)/(s+d);
+    var nwd = Math.exp(-d/C), ss=Math.exp(-d/(k*s));
+    [['mIou','vIou',iou],['mN','vN',nwd],['mS','vS',ss]].forEach(function(r){document.getElementById(r[0]).style.width=(r[2]*100).toFixed(1)+'%';document.getElementById(r[1]).textContent=r[2].toFixed(2);});
+    // drawing: scale so box fits
+    var sc=Math.min(3, 180/Math.max(L,s)), W=s*sc, H=L*sc, x0=210-W/2, y0=130-H/2, dx=d*sc;
+    var svg=document.getElementById('aSvg');
+    svg.innerHTML='<rect x="0" y="0" width="420" height="260" fill="'+css('--sunk')+'" rx="6"/>'+
+      '<rect x="'+x0+'" y="'+y0+'" width="'+W+'" height="'+H+'" fill="'+css('--label')+'" fill-opacity=".18" stroke="'+css('--label')+'" stroke-width="2.5"/>'+
+      '<rect x="'+(x0+dx)+'" y="'+y0+'" width="'+W+'" height="'+H+'" fill="none" stroke="'+css('--pred')+'" stroke-width="2.5" stroke-dasharray="7 5"/>'+
+      '<text x="12" y="22" font-family="Overpass Mono, monospace" font-size="12" fill="'+css('--muted')+'">'+s+' × '+L+' px box, shifted '+d+' px</text>';
+    var note=document.getElementById('aNote');
+    if(s<=8) note.textContent='A thin box: IoU falls fast, while the short-side score also drops, so a sloppy match on a crack is judged strictly relative to its width.';
+    else if(s>=48) note.textContent='A wide box: the same shift barely matters to IoU or to the short-side score.';
+    else note.textContent='Plain NWD gives the same score for every box size, because it uses one fixed constant C.';
+  }
+  aS.addEventListener('input',upA); aD.addEventListener('input',upA);
+
+  // ---------- Member C illustrative map ----------
+  var cT=document.getElementById('cT');
+  // deterministic pseudo-random
+  function rnd(i){var x=Math.sin(i*12.9898)*43758.5453;return x-Math.floor(x);}
+  var heat=[]; (function(){
+    var G=40,R=25; // 40 columns x 25 rows shown
+    for(var r=0;r<R;r++){for(var c=0;c<G;c++){
+      var v=0.08*rnd(r*G+c);
+      // missed crack path near column 9-11 rows 4-20
+      var d1=Math.abs(c-(9+Math.sin(r/3)*1.2)); if(r>3&&r<21) v+=Math.max(0,0.85-0.35*d1);
+      // second faint miss near row 17, cols 24-33
+      var d2=Math.abs(r-(17+Math.sin(c/2)*0.6)); if(c>23&&c<34) v+=Math.max(0,0.6-0.3*d2);
+      heat.push(Math.min(1,v));
+    }}
+  })();
+  function drawMap(){
+    var cv=document.getElementById('cMap'); if(!cv||cv.offsetParent===null) return; var x=cv.getContext('2d');
+    var G=40,R=25,cw=cv.width/G,ch=cv.height/R,t=+cT.value;
+    document.getElementById('cTo').textContent=t.toFixed(2);
+    x.fillStyle=css('--sunk'); x.fillRect(0,0,cv.width,cv.height);
+    // lane marking
+    x.fillStyle=css('--sign'); for(var y=0;y<cv.height;y+=46){x.fillRect(cv.width*0.52,y,7,26);}
+    // pothole + detected box
+    x.fillStyle=css('--muted'); x.globalAlpha=.55; x.beginPath(); x.ellipse(cv.width*0.8,cv.height*0.3,34,20,0,0,Math.PI*2); x.fill(); x.globalAlpha=1;
+    x.strokeStyle=css('--label'); x.lineWidth=2.5; x.strokeRect(cv.width*0.8-42,cv.height*0.3-28,84,56);
+    // faint cracks
+    x.strokeStyle=css('--fg'); x.globalAlpha=.55; x.lineWidth=1.2; x.beginPath();
+    for(var r=4;r<21;r++){var cx=(9+Math.sin(r/3)*1.2)*cw+cw/2, cy=r*ch+ch/2; if(r===4)x.moveTo(cx,cy); else x.lineTo(cx,cy);} x.stroke();
+    x.beginPath(); for(var c=24;c<34;c++){var px=c*cw+cw/2, py=(17+Math.sin(c/2)*0.6)*ch+ch/2; if(c===24)x.moveTo(px,py); else x.lineTo(px,py);} x.stroke(); x.globalAlpha=1;
+    var n=0; x.fillStyle=css('--heat');
+    for(var i=0;i<heat.length;i++){ if(heat[i]>=t){ n++; var rr=Math.floor(i/G), cc=i%G; x.globalAlpha=Math.min(.75,.25+heat[i]*.5); x.fillRect(cc*cw+0.5,rr*ch+0.5,cw-1,ch-1);} }
+    x.globalAlpha=1;
+    document.getElementById('cCount').textContent=n+' of '+heat.length+' cells flagged at this threshold';
+  }
+  cT.addEventListener('input',drawMap);
+
+  // ---------- dataset folds ----------
+  var C={JP:['Japan',10506],IN:['India',7706],US:['United States',4805],CZ:['Czech Republic',2829]};
+  var held='CZ';
+  function drawBars(){
+    var max=10506, box=document.getElementById('bars'); box.innerHTML='';
+    var train=0;
+    Object.keys(C).forEach(function(k){
+      var out=k===held; if(!out) train+=C[k][1];
+      var row=document.createElement('div'); row.className='bar'+(out?' out':'');
+      row.innerHTML='<span>'+C[k][0]+'</span><span class="track"><span class="fill" style="width:'+(C[k][1]/max*100).toFixed(1)+'%"></span></span><span class="v">'+C[k][1].toLocaleString('en-US')+' <span class="role">'+(out?'held out':'train')+'</span></span>';
+      box.appendChild(row);
+    });
+    document.getElementById('foldNote').textContent='This fold trains on '+train.toLocaleString('en-US')+' images from three countries. One of them is set aside as the inner validation country for development; '+C[held][0]+' stays sealed until the final evaluation.';
+    document.querySelectorAll('.fold-btns .chip').forEach(function(b){b.setAttribute('aria-pressed',b.dataset.c===held?'true':'false');});
+  }
+  document.querySelectorAll('.fold-btns .chip').forEach(function(b){b.addEventListener('click',function(){held=b.dataset.c;drawBars();});});
+
+  // ---------- tabs ----------
+  var tabs=[['t-a','p-a'],['t-b','p-b'],['t-c','p-c']];
+  tabs.forEach(function(t){document.getElementById(t[0]).addEventListener('click',function(){
+    tabs.forEach(function(u){var on=u[0]===t[0];document.getElementById(u[0]).setAttribute('aria-selected',on);document.getElementById(u[1]).hidden=!on;});
+  });});
+
+  // ---------- timeline ----------
+  var plan=[[1,3,'Literature, protocol, data'],[4,6,'Baseline, accuracy drop, timing pilot'],[7,8,'Implementation; C label gate'],[9,22,'Development, screened tuning, rolling final runs, freeze'],[23,27,'Held-out scoring and analysis'],[28,30,'Prototype web application'],[31,34,'Report, presentation, viva']];
+  var tl=document.getElementById('tl'), T=34;
+  plan.forEach(function(p){var row=document.createElement('div');row.className='tl-row';
+    row.innerHTML='<span><b class="mono">Weeks '+p[0]+'–'+p[1]+'</b><br><span class="muted" style="font-size:.9rem">'+p[2]+'</span></span><div class="tl-track"><div class="tl-seg" style="left:'+((p[0]-1)/T*100)+'%;width:'+((p[1]-p[0]+1)/T*100)+'%"></div></div>';
+    tl.appendChild(row);});
+  var ax=document.createElement('div');ax.className='tl-axis';var ticks='';[1,6,8,22,27,34].forEach(function(w){ticks+='<span style="left:'+((w-0.5)/T*100)+'%">w'+w+'</span>';});
+  ax.innerHTML='<div></div><div class="ticks">'+ticks+'</div>';tl.appendChild(ax);
+
+  // ---------- slides ----------
+  var N=14, cur=1, img=document.getElementById('slideImg'), th=document.getElementById('thumbs');
+  function pad(n){return (n<10?'0':'')+n;}
+  for(var i=1;i<=N;i++){(function(i){var b=document.createElement('button');b.type='button';b.setAttribute('aria-label','Slide '+i);b.innerHTML='<img loading="lazy" src="media/slide-'+pad(i)+'.jpg" alt="">';b.addEventListener('click',function(){go(i);});th.appendChild(b);})(i);}
+  function go(i){cur=Math.max(1,Math.min(N,i));img.src='media/slide-'+pad(cur)+'.jpg';img.alt='Slide '+cur;document.getElementById('slideNo').textContent=cur+' / '+N;
+    th.querySelectorAll('button').forEach(function(b,k){b.setAttribute('aria-current',k+1===cur?'true':'false');});}
+  document.getElementById('prev').addEventListener('click',function(){go(cur-1);});
+  document.getElementById('next').addEventListener('click',function(){go(cur+1);});
+  document.addEventListener('keydown',function(e){ if(document.getElementById('v-presentation').hidden) return; if(e.key==='ArrowRight')go(cur+1); if(e.key==='ArrowLeft')go(cur-1);});
+
+  // ---------- proposal pages ----------
+  var pg=document.getElementById('pages'), labels=['Cover','Title page','Contents (i)','Page 1','Page 2','Page 3','Page 4'];
+  labels.forEach(function(l,i){var f=document.createElement('figure');f.innerHTML='<img loading="lazy" src="media/page-'+(i+1)+'.jpg" alt="Proposal '+l+'"><figcaption class="figcap">'+l+'</figcaption>';pg.appendChild(f);});
+
+  upA(); drawBars(); go(1); show();
+  if(window.matchMedia) window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',function(){upA();drawMap();});
+})();
+</script>
+</body>
+</html>
